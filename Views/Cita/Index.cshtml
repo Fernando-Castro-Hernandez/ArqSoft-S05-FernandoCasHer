@@ -1,0 +1,32 @@
+﻿﻿@model List<CitasApp.Models.Cita>
+@using CitasApp.Models
+
+@{
+    var pacientes = ViewBag.Pacientes as List<Paciente>;
+    var medicos = ViewBag.Medicos as List<Medico>;
+}
+
+<h1>Agenda de citas</h1>
+<table border="1" cellpadding="8">
+    <tr>
+        <th>Fecha</th>
+        <th>Hora</th>
+        <th>Paciente</th>
+        <th>Médico</th>
+        <th>Motivo</th>
+        <th>Estado</th>
+    </tr>
+    @foreach (var c in Model)
+    {
+        var paciente = pacientes?.FirstOrDefault(p => p.Id == c.PacienteId);
+        var medico = medicos?.FirstOrDefault(m => m.Id == c.MedicoId);
+        <tr>
+            <td>@c.Fecha.ToString("dd/MM/yyyy")</td>
+            <td>@c.Hora.ToString("HH:mm")</td>
+            <td>@(paciente != null ? $"{paciente.Nombre} {paciente.Apellido}" : "—")</td>
+            <td>@(medico != null ? $"{medico.Nombre} {medico.Apellido}" : "—")</td>
+            <td>@c.Motivo</td>
+            <td>@c.Estado</td>
+        </tr>
+    }
+</table>
