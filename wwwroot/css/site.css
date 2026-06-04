@@ -1,31 +1,186 @@
-html {
-  font-size: 14px;
+
+/* 1) Paleta central. Cambia un color aquí y se actualiza todo. */
+:root {
+    --rojo: #d6182b; /* rojo cruz */
+    --rojo-oscuro: #a30f1e; /* hover / bordes fuertes */
+    --rojo-claro: #fdecec; /* relleno suave de filas */
+    --blanco: #ffffff;
+    --fondo: #f4f5f7; /* gris muy claro de fondo */
+    --texto: #2b2b2b;
+    --gris-borde: #e7e9ee;
+    --sombra: 0 2px 10px rgba(0, 0, 0, .07);
 }
 
-@media (min-width: 768px) {
-  html {
+/* 2) Base */
+html {
     font-size: 16px;
-  }
-}
-
-.btn:focus, .btn:active:focus, .btn-link.nav-link:focus, .form-control:focus, .form-check-input:focus {
-  box-shadow: 0 0 0 0.1rem white, 0 0 0 0.25rem #258cfb;
-}
-
-html {
-  position: relative;
-  min-height: 100%;
 }
 
 body {
-  margin-bottom: 60px;
+    margin: 0;
+    background: var(--fondo);
+    color: var(--texto);
+    font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+    line-height: 1.5;
 }
 
-.form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
-  color: var(--bs-secondary-color);
-  text-align: end;
+/* 3) Barra de navegación: blanca con línea roja abajo */
+.navbar {
+    background: var(--blanco) !important;
+    border-bottom: 4px solid var(--rojo) !important;
+    box-shadow: var(--sombra);
 }
 
-.form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
-  text-align: start;
+/* Marca con la cruz médica delante */
+.navbar-brand {
+    color: var(--rojo) !important;
+    font-weight: 800;
+    letter-spacing: .3px;
 }
+
+    .navbar-brand::before {
+        content: "✚";
+        margin-right: .4rem;
+        color: var(--rojo);
+    }
+
+.navbar .nav-link {
+    color: var(--texto) !important;
+    font-weight: 600;
+    border-radius: 6px;
+    padding: .35rem .75rem;
+    transition: background .15s ease, color .15s ease;
+}
+
+    .navbar .nav-link:hover {
+        background: var(--rojo-claro);
+        color: var(--rojo) !important;
+    }
+
+/* 4) Contenedor principal */
+main {
+    padding-top: .5rem;
+    padding-bottom: 2rem;
+}
+
+    /* 5) Títulos: encabezado con cruz y subrayado rojo (parece una caja-título) */
+    main h1 {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+        font-size: 1.7rem;
+        font-weight: 800;
+        color: var(--rojo-oscuro);
+        background: var(--blanco);
+        padding: 1rem 1.25rem;
+        border-left: 6px solid var(--rojo);
+        border-radius: 10px;
+        box-shadow: var(--sombra);
+        margin-bottom: 1.25rem;
+    }
+
+        main h1::before {
+            content: "✚";
+            color: var(--rojo);
+            font-size: 1.4rem;
+        }
+
+    /* 6) TABLAS como cajas (listas de pacientes, médicos, agenda) */
+    main table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: var(--blanco);
+        border: none; /* anula el border="1" del HTML */
+        border-radius: 10px;
+        overflow: hidden; /* recorta las esquinas redondeadas */
+        box-shadow: var(--sombra);
+        margin-bottom: 1.5rem;
+    }
+
+        main table th {
+            background: var(--rojo);
+            color: var(--blanco);
+            text-align: left;
+            font-weight: 700;
+            text-transform: uppercase;
+            font-size: .8rem;
+            letter-spacing: .5px;
+            padding: .85rem 1rem;
+            border: none;
+        }
+
+        main table td {
+            padding: .8rem 1rem;
+            border: none;
+            border-bottom: 1px solid var(--gris-borde);
+        }
+
+        /* Filas alternas y efecto hover */
+        main table tr:nth-child(even) td {
+            background: #fbfbfc;
+        }
+
+        main table tr:hover td {
+            background: var(--rojo-claro);
+        }
+
+        main table tr:last-child td {
+            border-bottom: none;
+        }
+
+        /* Enlaces dentro de las tablas ("Ver detalle") */
+        main table td a {
+            color: var(--rojo);
+            font-weight: 600;
+            text-decoration: none;
+        }
+
+            main table td a:hover {
+                text-decoration: underline;
+            }
+
+    /* 7) Vistas de detalle: los <p> sueltos se ven como una caja-ficha */
+    main > p {
+        background: var(--blanco);
+        padding: .85rem 1.1rem;
+        border-left: 4px solid var(--rojo);
+        border-radius: 8px;
+        box-shadow: var(--sombra);
+        margin: 0 0 .6rem 0;
+        max-width: 520px;
+    }
+
+        main > p strong {
+            color: var(--rojo-oscuro);
+        }
+
+    /* 8) Enlaces sueltos (← Volver, Ver sus citas) como botones rojos */
+    main > a {
+        display: inline-block;
+        margin-top: .75rem;
+        margin-right: .5rem;
+        padding: .55rem 1.1rem;
+        background: var(--rojo);
+        color: var(--blanco);
+        font-weight: 600;
+        text-decoration: none;
+        border-radius: 8px;
+        box-shadow: var(--sombra);
+        transition: background .15s ease;
+    }
+
+        main > a:hover {
+            background: var(--rojo-oscuro);
+        }
+
+/* 9) Pie de página */
+.footer {
+    background: var(--blanco);
+    border-top: 4px solid var(--rojo) !important;
+    padding: 1rem 0;
+}
+
+    .footer a {
+        color: var(--rojo);
+    }
