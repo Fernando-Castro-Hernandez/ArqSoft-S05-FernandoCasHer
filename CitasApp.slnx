@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="CitasApp.Domain/CitasApp.Domain.csproj" />
+  <Project Path="CitasApp.Infrastructure/CitasApp.Infrastructure.csproj" />
+  <Project Path="CitasApp.Web/CitasApp.Web.csproj" />
+</Solution>
