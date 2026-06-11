@@ -1,0 +1,6 @@
+Id,PacienteId,MedicoId,Fecha,Hora,Motivo,Estado
+1,101,201,2026-06-11,09:00,Control de rutina mensual,Pendiente
+2,102,202,2026-06-11,10:30,Revisión de resultados de laboratorio,Pendiente
+3,103,201,2026-06-11,11:15,Dolor de cabeza crónico y fatiga,Pendiente
+4,104,203,2026-06-12,16:00,Consulta inicial por dolor lumbar,Pendiente
+5,105,202,2026-06-12,17:30,Seguimiento de tratamiento de hipertensión,Pendiente
