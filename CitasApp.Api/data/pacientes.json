@@ -1,0 +1,30 @@
+[
+    {
+        "Id": 1,
+        "Nombre": "Fernando",
+        "Apellido": "Castro",
+        "Email": "fer@mail.com",
+        "Telefono": "555-0001"
+    },
+    {
+        "Id": 2,
+        "Nombre": "Mateo",
+        "Apellido": "Martín",
+        "Email": "mateo@mail.com",
+        "Telefono": "555-0002"
+    },
+    {
+        "Id": 3,
+        "Nombre": "Venus",
+        "Apellido": "Semino",
+        "Email": "venven@mail.com",
+        "Telefono": "555-0003"
+    },
+    {
+        "Id": 4,
+        "Nombre": "Robertito",
+        "Apellido": "Romero",
+        "Email": "betho@gmail.com",
+        "Telefono": "555-0004"
+    }
+]
