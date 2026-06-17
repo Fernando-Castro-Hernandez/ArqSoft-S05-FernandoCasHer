@@ -1,157 +1,98 @@
-# CitasApp 🏥
-
-App de citas médicas construida con **ASP.NET Core MVC (.NET 10)**.
-
-Proyecto de la materia **Arquitectura de Software**. Más que una app funcional,
-es una maqueta pensada para *ver en código* cómo se organiza un sistema bajo el
-estilo **hexagonal (Ports & Adapters)**.
-
----
-
-## ¿Por qué se refactorizó?
-
-La versión anterior era una **arquitectura por capas** dentro de un solo proyecto:
-todo (controllers, vistas, repositorios y modelos) vivía junto, y la lógica de
-negocio estaba mezclada con la tecnología web. El problema concreto: si mañana la
-clínica pide una **app móvil** o una **API REST**, habría que duplicar la lógica,
-porque la capa de presentación estaba amarrada al resto.
-
-La refactorización separa el sistema en **tres proyectos independientes** para que
-el núcleo de negocio quede aislado y la tecnología (web, JSON, SQL, móvil) sea
-*intercambiable* sin tocar ese núcleo.
-
----
-
-## La estructura
-
+# CitasApp — Rama `Api`
+ 
+Sistema de gestión de citas médicas para una clínica. Esta rama agrega una **API REST** sobre la arquitectura por capas existente, exponiendo la lógica de la aplicación por HTTP + JSON para que cualquier cliente (app móvil, Postman, otro servicio) pueda consumirla, no solo el navegador.
+ 
+## ¿Qué agrega esta rama?
+ 
+Hasta la rama anterior, el único cliente de la lógica de negocio era `CitasApp.Web` (MVC, para navegador). Esta rama añade un **quinto proyecto, `CitasApp.Api`**, que reutiliza exactamente las mismas capas de Domain, Application e Infrastructure y solo cambia la "puerta de entrada": en lugar de devolver vistas HTML, devuelve JSON a través de endpoints HTTP.
+ 
 ```
-CitasApp.sln
-├── CitasApp.Domain/            ← el núcleo: no depende de nadie
-│   ├── Models/                 (Paciente, Medico, Cita, CitaJson)
-│   └── Interfaces/             (ICitaRepository, IMedicoRepository, IPacienteRepository)  ← Ports
-│
-├── CitasApp.Infrastructure/    ← los Adapters de salida
-│   └── Repositories/           (JsonCitaRepository, JsonMedicoRepository, JsonPacienteRepository)
-│
-└── CitasApp.Web/               ← el Adapter de entrada + composition root
-    ├── Controllers/
-    ├── Views/
-    ├── data/                   (pacientes.json, medicos.json, citas.json)
-    └── Program.cs              ← aquí se "enchufan" los adapters a los ports
+Navegador ─────► CitasApp.Web  ─┐
+                                 ├─► Application ─► Domain ◄─ Infrastructure
+Móvil/Postman ─► CitasApp.Api  ─┘
 ```
-
----
-
-## ¿Qué es la arquitectura hexagonal aquí?
-
-La idea central es: **el negocio al centro, todo lo demás es intercambiable**.
-
-El núcleo (`CitasApp.Domain`) define *qué* hace el sistema mediante entidades e
-interfaces, sin saber *con qué tecnología* se hace. Todo lo externo —la web, el
-almacenamiento— se conecta a ese núcleo a través de **Ports** (interfaces) que se
-implementan con **Adapters** (clases concretas).
-
-- **Port** = una interfaz que define cómo se comunica algo con el núcleo.
-  En este repo, `ICitaRepository` es un *port de salida*: el núcleo dice
-  "necesito algo que sepa obtener citas", sin importarle de dónde salgan.
-- **Adapter** = la implementación concreta de ese port.
-  `JsonCitaRepository` es el adapter actual: lee las citas de archivos JSON.
-  El día que se use una base de datos real, se crea un `SqlCitaRepository`
-  —mismo port, nuevo adapter— y el núcleo **no cambia ni una línea**.
-
----
-
-## ¿Cómo están conectadas las partes? (las referencias)
-
-La regla de oro de hexagonal es que **las dependencias apuntan hacia adentro**,
-hacia el núcleo. Eso se traduce a esta dirección exacta entre los tres proyectos:
-
+ 
+Mismo `Application`, mismo `Domain`, misma `Infrastructure`. Solo un cliente nuevo.
+ 
+## Arquitectura
+ 
+El proyecto sigue una separación en capas con dependencias dirigidas hacia el dominio:
+ 
+| Capa | Proyecto | Responsabilidad |
+|------|----------|-----------------|
+| Dominio | `CitasApp.Domain` | Modelos (`Paciente`, `Medico`, `Cita`) e interfaces de repositorio (puertos). |
+| Aplicación | `CitasApp.Application` | Servicios (`PacienteService`, `MedicoService`, `CitaService`) que orquestan la lógica. Dependen solo del dominio. |
+| Infraestructura | `CitasApp.Infrastructure` | Implementaciones concretas de los repositorios (adapters JSON) que leen los datos. |
+| Presentación (web) | `CitasApp.Web` | Cliente MVC para navegador. |
+| Presentación (API) | `CitasApp.Api` | Cliente REST. Controllers que exponen los servicios como endpoints HTTP. |
+ 
+**Flujo de una petición:**
+ 
 ```
-   CitasApp.Web ──────────────┐
-      │  │                     │
-      │  └──> CitasApp.Infrastructure
-      │              │
-      └──────────────┴──> CitasApp.Domain
-                               │
-                             (nadie)
+GET /api/pacientes
+  → PacientesController          (recibe la petición HTTP)
+  → PacienteService              (lógica de aplicación)
+  → IPacienteRepository          (puerto / interfaz)
+  → JsonPacienteRepository       (adapter que lee pacientes.json)
+  → JSON de respuesta
 ```
-
-- **`CitasApp.Domain`** no referencia a nadie. Es el núcleo puro.
-- **`CitasApp.Infrastructure` → `Domain`**, porque sus adapters *implementan* los
-  ports (interfaces) que viven en Domain.
-- **`CitasApp.Web` → `Domain` + `Infrastructure`**. Domain para usar los modelos y
-  las interfaces en los controllers; Infrastructure porque `Program.cs` es el
-  **composition root**: el único lugar que conoce a los adapters concretos y los
-  conecta a sus ports.
-
-Esa conexión final ocurre en `Program.cs`:
-
-```csharp
-builder.Services.AddScoped<IPacienteRepository, JsonPacienteRepository>();
-builder.Services.AddScoped<IMedicoRepository, JsonMedicoRepository>();
-builder.Services.AddScoped<ICitaRepository, JsonCitaRepository>();
+ 
+Los controllers **no tienen lógica de negocio**: solo reciben la petición, llaman al servicio correspondiente y traducen el resultado a un código HTTP (`200 OK`, `404 Not Found`, `400 Bad Request`). El cableado entre interfaz e implementación se hace por **inyección de dependencias** en `Program.cs`, así que cambiar el origen de datos (de JSON a una base de datos) no obliga a tocar los servicios ni los controllers — solo se registra otro adapter.
+ 
+## Estructura del proyecto API
+ 
 ```
-
-Cada línea dice: *"cuando alguien pida este Port, entrégale este Adapter"*. Es el
-único punto del sistema donde el negocio y la tecnología se tocan.
-
-### ¿Por qué Domain no debe referenciar a Infrastructure?
-
-Si lo hiciera, el núcleo quedaría amarrado a la tecnología de persistencia y se
-perdería justo lo que se busca: poder cambiar de JSON a SQL tocando solo
-Infrastructure. La dependencia se invertiría y volveríamos al problema original.
-
----
-
-## Diferencia con la arquitectura por capas anterior
-
-Antes y ahora **comparten una idea** (separar responsabilidades), pero la diferencia
-está en *qué tan estricta y física* es esa separación.
-
-| | Arquitectura por capas (antes) | Arquitectura hexagonal (ahora) |
-|---|---|---|
-| **Separación** | Por carpetas dentro de **un solo proyecto** | Por **tres proyectos** independientes (.csproj) |
-| **Qué impone los límites** | Disciplina del programador (nada impide saltarse capas) | El **compilador**: si Domain intentara usar algo de Infrastructure, no compila |
-| **Dirección de dependencias** | De arriba hacia abajo (Presentation → … → Infrastructure) | Hacia el centro (todo apunta a Domain) |
-| **El núcleo** | Conoce indirectamente la infraestructura | Aislado por completo; no sabe que existe la web ni el JSON |
-| **Agregar un cliente (móvil/API)** | La capa de presentación se vuelve un cuello de botella | Se agrega un nuevo **adapter de entrada**; el núcleo no se toca |
-
-En capas, "no saltarse capas" era una **convención** que dependía de uno. En
-hexagonal, las referencias entre proyectos hacen que esa regla sea **imposible de
-violar**: Domain literalmente no tiene forma de llamar a Infrastructure porque no
-la referencia. Esa es la ganancia real del cambio.
-
----
-
+CitasApp.Api/
+├── Controllers/
+│   ├── PacientesController.cs
+│   ├── MedicosController.cs
+│   ├── CitasController.cs
+│   └── CalculadoraController.cs
+├── data/                  ← pacientes.json, medicos.json, citas.json (Copy Always)
+└── Program.cs             ← registro de repositorios y servicios (DI)
+```
+ 
+## Endpoints
+ 
+Pacientes, médicos y citas (sustituye `{puerto}` por el puerto http):
+ 
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/api/pacientes` | Lista de pacientes |
+| GET | `/api/pacientes/{id}` | Un paciente por id (`404` si no existe) |
+| GET | `/api/medicos` | Lista de médicos |
+| GET | `/api/medicos/{id}` | Un médico por id (`404` si no existe) |
+| GET | `/api/citas` | Agenda completa |
+| GET | `/api/citas/porpaciente/{pacienteId}` | Citas de un paciente (`404` si no tiene) |
+ 
+Calculadora (parámetros por query string `?a=&b=`):
+ 
+| Método | Ruta | Ejemplo de respuesta |
+|--------|------|----------------------|
+| GET | `/api/calculadora/sumar?a=28&b=32` | `{"operacion":"suma","a":28,"b":32,"resultado":60}` |
+| GET | `/api/calculadora/restar?a=28&b=32` | `{"operacion":"resta",...,"resultado":-4}` |
+| GET | `/api/calculadora/multiplicar?a=28&b=32` | `{"operacion":"multiplicacion",...,"resultado":896}` |
+| GET | `/api/calculadora/dividir?a=28&b=32` | `{"operacion":"division",...,"resultado":0.875}` |
+ 
+La división entre cero responde `400 Bad Request` con un mensaje de error.
+ 
+### Verificación rápida (PowerShell)
+ 
+```powershell
+(iwr "http://localhost:5183/api/pacientes").Content
+(iwr "http://localhost:5183/api/citas/porpaciente/2").Content
+(iwr "http://localhost:5183/api/calculadora/sumar?a=28&b=32").Content
+```
+ 
 ## Persistencia
-
-Archivos JSON en `CitasApp.Web/data/` — sin base de datos.
-
-- `data/pacientes.json`
-- `data/medicos.json`
-- `data/citas.json`
-
-Son el detalle de implementación que esconde el adapter JSON. Cambiar a una base
-de datos no afectaría a Domain ni a los Controllers.
-
----
-
-## Cómo correr el proyecto
-
-```bash
-dotnet build CitasApp.slnx
-dotnet run --project CitasApp.Web
-```
-
-> En Visual Studio, asegúrate de que **CitasApp.Web** esté marcado como *proyecto
-> de inicio* (aparece en negrita). Domain e Infrastructure son librerías y no se
-> pueden ejecutar.
-
-### Navegación
-
-- `/Paciente` — lista de pacientes
-- `/Medico` — lista de médicos
-- `/Cita` — agenda completa
-- `/Cita/PorPaciente?pacienteId=1` — citas de un paciente específico
-
----
+ 
+Actualmente los datos viven en archivos JSON dentro de `CitasApp.Api/data/`, leídos por los repositorios `Json*Repository`. Los archivos deben tener **Copy to Output Directory = Copy Always** para que se copien al directorio de salida; si la API responde `[]`, normalmente es porque esos archivos no se copiaron.
+ 
+Esta decisión de persistencia es temporal. Al desplegar en producción, los archivos locales no escalan (varias instancias tendrían datos distintos), por lo que el siguiente paso es sustituir el adapter JSON por uno conectado a una base de datos — sin modificar los servicios, gracias a la separación por capas.
+ 
+## Stack
+ 
+- ASP.NET Core 10 (Web API)
+- C# / .NET 10
+- Persistencia en JSON (vía repositorios intercambiables)
+- Solución en formato `.slnx`
