@@ -1,6 +1,8 @@
 using Citas_App.Interfaces;
 using Citas_App.Repositories;
 using CitasApp.Infrastructure.Repositories;
+using Citas_App.Services;
+using Citas_App.Observers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -28,6 +30,15 @@ builder.Services.AddScoped<IPacienteRepository>(sp =>
     return new LoggingPacienteRepository(repo);                                     // ← Decorator lo envuelve
 });
 
+// ── Observer ─────────────────────────────────────────────────────────────────
+// Cada observer se registra bajo la MISMA interfaz. Al pedir IEnumerable<ICitaObserver>,
+// la inyección de dependencias entrega los dos.
+builder.Services.AddScoped<ICitaObserver, SmsObserver>();
+builder.Services.AddScoped<ICitaObserver, EmailObserver>();
+
+// CitaService (Domain) recibe el repo de citas + todos los observers
+builder.Services.AddScoped<CitaService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -43,6 +54,8 @@ app.UseRouting();
 app.UseAuthorization();
 
 app.MapStaticAssets();
+
+app.MapControllers();   // habilita las rutas de atributo del controller API
 
 app.MapControllerRoute(
     name: "default",
