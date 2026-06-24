@@ -1,23 +1,20 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Text;
-using Citas_App.Interfaces;
+﻿using Citas_App.Interfaces;
 using Citas_App.Models;
-using System.Text.Json;
-using Microsoft.AspNetCore.Hosting;
 
 namespace Citas_App.Repositories
 {
-    internal class MemoriaPacienteRepository : IPacienteRepository
+    public class MemoriaPacienteRepository : IPacienteRepository
     {
-        public Paciente? ObtenerPorId(int id)
+        private readonly List<Paciente> _pacientes = new()
         {
-            throw new NotImplementedException();
-        }
+            new Paciente { Id = 1, Nombre = "Production", Apellido = "Uno",  Email = "prod1@mail.com", Telefono = "999-0001" },
+            new Paciente { Id = 2, Nombre = "Production", Apellido = "Dos",  Email = "prod2@mail.com", Telefono = "999-0002" },
+            new Paciente { Id = 3, Nombre = "Production", Apellido = "Tres", Email = "prod3@mail.com", Telefono = "999-0003" }
+        };
 
-        public List<Paciente> ObtenerTodos()
-        {
-            throw new NotImplementedException();
-        }
+        public List<Paciente> ObtenerTodos() => _pacientes;
+
+        public Paciente? ObtenerPorId(int id) =>
+            _pacientes.FirstOrDefault(p => p.Id == id);
     }
 }

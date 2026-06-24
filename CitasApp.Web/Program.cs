@@ -3,34 +3,37 @@ using Citas_App.Repositories;
 using CitasApp.Infrastructure.Repositories;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Add services to the container.
 builder.Services.AddControllersWithViews();
 
-// Carpeta de datos
+// ── Carpeta de datos (para los CSV de Médico y Cita) ─────────────────────────
 var dataFolder = Path.Combine(builder.Environment.WebRootPath, "data");
 Directory.CreateDirectory(dataFolder);
 
-var csvPacientes = Path.Combine(dataFolder, "pacientes.csv");
 var csvMedicos = Path.Combine(dataFolder, "medicos.csv");
 var csvCitas = Path.Combine(dataFolder, "citas.csv");
 
-// ▶ CSV (activo)
-//
-builder.Services.AddScoped<IPacienteRepository>(_ => new CsvPacienteRepository(csvPacientes));
+// ── Médico y Cita: adapters CSV (práctica anterior) ──────────────────────────
 builder.Services.AddScoped<IMedicoRepository>(_ => new CsvMedicoRepository(csvMedicos));
 builder.Services.AddScoped<ICitaRepository>(_ => new CsvCitaRepository(csvCitas));
-//
-/* ▶ JSON (lo que tenías — comentado)
-builder.Services.AddScoped<IPacienteRepository, JsonPacienteRepository>();
-builder.Services.AddScoped<IMedicoRepository, JsonMedicoRepository>();
-builder.Services.AddScoped<ICitaRepository, JsonCitaRepository>();
-*/
+
+// ── Paciente: Factory + Decorator (práctica #26) ─────────────────────────────
+// El Factory decide qué repositorio crear según el entorno.
+// El Decorator lo envuelve para agregar logging sin tocar el repo original.
+builder.Services.AddScoped<IPacienteRepository>(sp =>
+{
+    var env = sp.GetRequiredService<IWebHostEnvironment>();
+    var repo = RepositoryFactory.CrearPacienteRepository(env.EnvironmentName, env); // ← Factory decide cuál
+    return new LoggingPacienteRepository(repo);                                     // ← Decorator lo envuelve
+});
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
@@ -45,6 +48,5 @@ app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}")
     .WithStaticAssets();
-
 
 app.Run();
