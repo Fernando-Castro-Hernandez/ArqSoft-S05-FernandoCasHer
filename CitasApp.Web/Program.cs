@@ -3,6 +3,9 @@ using Citas_App.Repositories;
 using CitasApp.Infrastructure.Repositories;
 using Citas_App.Services;
 using Citas_App.Observers;
+using Citas_App.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -36,6 +39,18 @@ builder.Services.AddScoped<IPacienteRepository>(sp =>
 builder.Services.AddScoped<ICitaObserver, SmsObserver>();
 builder.Services.AddScoped<ICitaObserver, EmailObserver>();
 
+// ── Base de datos (PostgreSQL) + Identity Core ───────────────────────────────
+// DbContext apunta a PostgreSQL usando la cadena de appsettings.json.
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// Identity: usuarios + roles, respaldados por AppDbContext (las tablas AspNet*).
+builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddDefaultTokenProviders();
+
+
 // CitaService (Domain) recibe el repo de citas + todos los observers
 builder.Services.AddScoped<CitaService>();
 
@@ -51,6 +66,7 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseRouting();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();
