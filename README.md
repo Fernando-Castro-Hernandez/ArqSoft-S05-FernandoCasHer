@@ -1,131 +1,186 @@
-# CitasApp — Rama `Api`
- 
-Sistema de gestión de citas médicas para una clínica. Esta rama agrega una **API REST** sobre la arquitectura por capas existente, exponiendo la lógica de la aplicación por HTTP + JSON para que cualquier cliente (app móvil, Postman, otro servicio) pueda consumirla, no solo el navegador.
+# Configuración de Base de Datos (PostgreSQL) + Identity Core
 
-## Documentación de arquitectura — Diagramas C4 (rama `UML`)
+Este documento describe la integración de una base de datos **PostgreSQL** mediante
+**Entity Framework Core** y la instalación de **ASP.NET Core Identity** en el proyecto
+`CitasApp.Web`, realizada en la rama `BaseDeDatosAndIdentity`.
 
-La rama `UML` se creó a partir de `GOF-Patterns` (la rama más actualizada del
-proyecto) para la **Actividad #29** (Semana 10 — Documentación de
-Arquitectura, materia Arquitectura de Software). Su único propósito es
-agregar documentación de arquitectura **versionada como código**: tres
-diagramas del modelo C4 (Contexto, Contenedores, Componentes) escritos en
-Mermaid dentro de `/docs`, que reflejan el estado real de CitasApp — no un
-diagrama genérico.
+---
 
-**Por qué:** un diagrama dibujado en Paint hace un mes deja de coincidir con
-el código en cuanto el proyecto crece — vive en el escritorio de alguien, no
-en el repositorio, y nadie sabe si sigue vigente. Estos diagramas están en
-texto plano dentro del repo: se versionan en el mismo commit que el código,
-se revisan en Code Review como cualquier otro archivo, y GitHub los
-renderiza automáticamente al abrir el `.md`.
+## Qué se hizo 
 
-**Para quién:** cada nivel tiene una audiencia distinta —
+Hasta este punto, CitasApp persistía todos sus datos (pacientes, médicos, citas) en
+archivos **JSON/CSV**, sin base de datos real. En esta etapa se agregó la infraestructura
+de base de datos y de autenticación, sin reemplazar todavía la persistencia en archivos:
 
-- **C1 — Contexto**: cualquier persona, técnica o no (cliente, maestro, un
-  compañero nuevo el primer día).
-- **C2 — Contenedores**: el equipo técnico, para entender de qué piezas
-  grandes está hecho el sistema.
-- **C3 — Componentes**: quien va a modificar código dentro de
-  `CitasApp.Web`, donde viven los patrones GOF (Factory, Decorator, Observer)
-  de la práctica #26.
+1. Se conectó el proyecto a **PostgreSQL** usando Entity Framework Core.
+2. Se instaló **ASP.NET Core Identity** (gestión de usuarios y roles).
+3. Se generó y aplicó la **migración inicial**, creando las tablas de Identity en la base de datos.
 
-| Nivel | Archivo | Responde |
-|---|---|---|
-| C1 — Contexto | [docs/C1-Contexto.md](docs/C1-Contexto.md) | ¿Qué es el sistema y quién lo usa? |
-| C2 — Contenedores | [docs/C2-Contenedores.md](docs/C2-Contenedores.md) | ¿De qué piezas técnicas grandes se compone? |
-| C3 — Componentes | [docs/C3-Componentes.md](docs/C3-Componentes.md) | ¿Qué hay dentro de `CitasApp.Web`? |
+> **Importante:** las entidades de negocio (`Paciente`, `Medico`, `Cita`) **siguen en JSON/CSV**.
+> Esta etapa solo construye la infraestructura de autenticación; migrar el negocio a la BD
+> queda para una etapa posterior.
 
-## ¿Qué agrega esta rama?
- 
-Hasta la rama anterior, el único cliente de la lógica de negocio era `CitasApp.Web` (MVC, para navegador). Esta rama añade un **quinto proyecto, `CitasApp.Api`**, que reutiliza exactamente las mismas capas de Domain, Application e Infrastructure y solo cambia la "puerta de entrada": en lugar de devolver vistas HTML, devuelve JSON a través de endpoints HTTP.
- 
+---
+
+## Paquetes instalados (NuGet)
+
+Instalados en el proyecto `CitasApp.Web`:
+
+| Paquete | Para qué sirve |
+|---|---|
+| `Npgsql.EntityFrameworkCore.PostgreSQL` | Driver que permite a EF Core comunicarse con PostgreSQL. |
+| `Microsoft.AspNetCore.Identity.EntityFrameworkCore` | ASP.NET Core Identity respaldado por EF Core (trae `IdentityDbContext`, `IdentityUser`, `IdentityRole`). |
+| `Microsoft.EntityFrameworkCore.Design` | Herramientas de diseño necesarias para generar migraciones con `dotnet ef`. |
+
+Comandos usados:
+
+```bash
+dotnet add CitasApp.Web package Npgsql.EntityFrameworkCore.PostgreSQL
+dotnet add CitasApp.Web package Microsoft.AspNetCore.Identity.EntityFrameworkCore
+dotnet add CitasApp.Web package Microsoft.EntityFrameworkCore.Design
+
+# Herramientas de línea de comandos de EF Core (una vez por máquina)
+dotnet tool install --global dotnet-ef
 ```
-Navegador ─────► CitasApp.Web  ─┐
-                                 ├─► Application ─► Domain ◄─ Infrastructure
-Móvil/Postman ─► CitasApp.Api  ─┘
+
+---
+
+## El DbContext
+
+Se creó la clase `AppDbContext` en `CitasApp.Web/data/AppDbContext.cs`. Hereda de
+`IdentityDbContext<IdentityUser>`, lo que hace que EF Core "conozca" automáticamente
+todas las tablas que Identity necesita, sin escribirlas a mano.
+
+```csharp
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
+
+namespace Citas_App.Data
+{
+    // Hereda de IdentityDbContext: eso trae AspNetUsers, AspNetRoles, etc.
+    // No definimos DbSet<Paciente/Medico/Cita> todavía — siguen en JSON.
+    public class AppDbContext : IdentityDbContext<IdentityUser>
+    {
+        public AppDbContext(DbContextOptions<AppDbContext> options)
+            : base(options)
+        {
+        }
+    }
+}
 ```
- 
-Mismo `Application`, mismo `Domain`, misma `Infrastructure`. Solo un cliente nuevo.
- 
-## Arquitectura
- 
-El proyecto sigue una separación en capas con dependencias dirigidas hacia el dominio:
- 
-| Capa | Proyecto | Responsabilidad |
-|------|----------|-----------------|
-| Dominio | `CitasApp.Domain` | Modelos (`Paciente`, `Medico`, `Cita`) e interfaces de repositorio (puertos). |
-| Aplicación | `CitasApp.Application` | Servicios (`PacienteService`, `MedicoService`, `CitaService`) que orquestan la lógica. Dependen solo del dominio. |
-| Infraestructura | `CitasApp.Infrastructure` | Implementaciones concretas de los repositorios (adapters JSON) que leen los datos. |
-| Presentación (web) | `CitasApp.Web` | Cliente MVC para navegador. |
-| Presentación (API) | `CitasApp.Api` | Cliente REST. Controllers que exponen los servicios como endpoints HTTP. |
- 
-**Flujo de una petición:**
- 
+
+---
+
+## Registro en `Program.cs`
+
+Se agregó el registro del `DbContext` (apuntando a PostgreSQL) y de Identity en el
+composition root, junto a los patrones ya existentes (Factory, Decorator, Observer):
+
+```csharp
+using Citas_App.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
+
+// ── Base de datos (PostgreSQL) + Identity Core ───────────────────────────────
+// DbContext apunta a PostgreSQL usando la cadena de appsettings.json.
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// Identity: usuarios + roles, respaldados por AppDbContext (las tablas AspNet*).
+builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddDefaultTokenProviders();
 ```
-GET /api/pacientes
-  → PacientesController          (recibe la petición HTTP)
-  → PacienteService              (lógica de aplicación)
-  → IPacienteRepository          (puerto / interfaz)
-  → JsonPacienteRepository       (adapter que lee pacientes.json)
-  → JSON de respuesta
+
+Y en el pipeline HTTP se agregó el middleware de autenticación, **antes** de la
+autorización (el orden importa: primero se identifica *quién eres*, luego *qué puedes hacer*):
+
+```csharp
+app.UseAuthentication();   // ← debe ir ANTES de UseAuthorization
+app.UseAuthorization();
 ```
- 
-Los controllers **no tienen lógica de negocio**: solo reciben la petición, llaman al servicio correspondiente y traducen el resultado a un código HTTP (`200 OK`, `404 Not Found`, `400 Bad Request`). El cableado entre interfaz e implementación se hace por **inyección de dependencias** en `Program.cs`, así que cambiar el origen de datos (de JSON a una base de datos) no obliga a tocar los servicios ni los controllers — solo se registra otro adapter.
- 
-## Estructura del proyecto API
- 
+
+---
+
+## Cadena de conexión y manejo seguro de la contraseña
+
+La cadena de conexión vive en `appsettings.json`, pero **sin la contraseña real**. En su
+lugar se usa un placeholder, y la contraseña verdadera se guarda en **User Secrets**
+(fuera del repositorio, en la carpeta de usuario), para no exponerla en Git.
+
+`appsettings.json` (lo que sí se commitea):
+
+```json
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=citasapp;Username=postgres;Password=__SET_IN_USER_SECRETS__"
+  }
+}
 ```
-CitasApp.Api/
-├── Controllers/
-│   ├── PacientesController.cs
-│   ├── MedicosController.cs
-│   ├── CitasController.cs
-│   └── CalculadoraController.cs
-├── data/                  ← pacientes.json, medicos.json, citas.json (Copy Always)
-└── Program.cs             ← registro de repositorios y servicios (DI)
+
+La contraseña real se guarda con User Secrets (no se sube al repo):
+
+```bash
+dotnet user-secrets init --project CitasApp.Web
+dotnet user-secrets set "ConnectionStrings:DefaultConnection" "Host=localhost;Port=5432;Database=citasapp;Username=postgres;Password=TU_PASSWORD" --project CitasApp.Web
 ```
- 
-## Endpoints
- 
-Pacientes, médicos y citas (sustituye `{puerto}` por el puerto http):
- 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/pacientes` | Lista de pacientes |
-| GET | `/api/pacientes/{id}` | Un paciente por id (`404` si no existe) |
-| GET | `/api/medicos` | Lista de médicos |
-| GET | `/api/medicos/{id}` | Un médico por id (`404` si no existe) |
-| GET | `/api/citas` | Agenda completa |
-| GET | `/api/citas/porpaciente/{pacienteId}` | Citas de un paciente (`404` si no tiene) |
- 
-Calculadora (parámetros por query string `?a=&b=`):
- 
-| Método | Ruta | Ejemplo de respuesta |
-|--------|------|----------------------|
-| GET | `/api/calculadora/sumar?a=28&b=32` | `{"operacion":"suma","a":28,"b":32,"resultado":60}` |
-| GET | `/api/calculadora/restar?a=28&b=32` | `{"operacion":"resta",...,"resultado":-4}` |
-| GET | `/api/calculadora/multiplicar?a=28&b=32` | `{"operacion":"multiplicacion",...,"resultado":896}` |
-| GET | `/api/calculadora/dividir?a=28&b=32` | `{"operacion":"division",...,"resultado":0.875}` |
- 
-La división entre cero responde `400 Bad Request` con un mensaje de error.
- 
-### Verificación rápida (PowerShell)
- 
-```powershell
-(iwr "http://localhost:5183/api/pacientes").Content
-(iwr "http://localhost:5183/api/citas/porpaciente/2").Content
-(iwr "http://localhost:5183/api/calculadora/sumar?a=28&b=32").Content
-```
- 
-## Persistencia
- 
-Actualmente los datos viven en archivos JSON dentro de `CitasApp.Api/data/`, leídos por los repositorios `Json*Repository`. Los archivos deben tener **Copy to Output Directory = Copy Always** para que se copien al directorio de salida; si la API responde `[]`, normalmente es porque esos archivos no se copiaron.
- 
-Esta decisión de persistencia es temporal. Al desplegar en producción, los archivos locales no escalan (varias instancias tendrían datos distintos), por lo que el siguiente paso es sustituir el adapter JSON por uno conectado a una base de datos — sin modificar los servicios, gracias a la separación por capas.
- 
-## Stack
- 
-- ASP.NET Core 10 (Web API)
-- C# / .NET 10
-- Persistencia en JSON (vía repositorios intercambiables)
-- Solución en formato `.slnx`
+
+En desarrollo, .NET mezcla automáticamente los User Secrets con `appsettings.json` y
+**sobrescribe** el placeholder con la cadena real. El código
+(`GetConnectionString("DefaultConnection")`) no cambia.
+
+> **Por qué:** si la contraseña estuviera en `appsettings.json`, quedaría en el historial
+> de Git para siempre. Con User Secrets, cada desarrollador guarda su propia contraseña
+> localmente y el repositorio nunca la ve.
+
+---
+## Qué se construyó en la base de datos
+
+Al aplicar la migración, se crearon en PostgreSQL las tablas estándar de Identity:
+
+| Tabla | Contenido |
+|---|---|
+| `AspNetUsers` | Usuarios (email, contraseña hasheada, etc.) |
+| `AspNetRoles` | Roles (ej. Admin, Paciente, Medico) |
+| `AspNetUserRoles` | Relación usuarios ↔ roles |
+| `AspNetUserClaims` | Claims por usuario |
+| `AspNetUserLogins` | Logins externos (Google, etc.) |
+| `AspNetUserTokens` | Tokens por usuario |
+| `AspNetRoleClaims` | Claims por rol |
+| `__EFMigrationsHistory` | Registro de qué migraciones ya se aplicaron |
+
+> Las tablas se crean **vacías**. Identity solo construye la estructura; los usuarios de la
+> aplicación se registran después, cuando se implemente la funcionalidad de registro/login.
+
+---
+
+## Cómo reproducir en otra máquina
+
+1. Tener **PostgreSQL** instalado y corriendo (por defecto en `localhost:5432`).
+2. Guardar la contraseña de PostgreSQL en User Secrets (ver sección de cadena de conexión).
+3. Aplicar las migraciones para crear las tablas:
+
+   ```bash
+   dotnet ef database update --project CitasApp.Web
+   ```
+
+4. Verificar que las tablas se crearon (opcional, con `psql`):
+
+   ```bash
+   psql -U postgres -h localhost -d citasapp -c "\dt"
+   ```
+
+---
+
+## Datos de conexión usados
+
+| Parámetro | Valor |
+|---|---|
+| Motor | PostgreSQL |
+| Host | `localhost` |
+| Puerto | `5432` |
+| Base de datos | `citasapp` |
+| Usuario | `postgres` |
+| Contraseña | Guardada en **User Secrets** (no en el repositorio) |
