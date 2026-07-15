@@ -1,131 +1,197 @@
-# CitasApp — Rama `Api`
- 
-Sistema de gestión de citas médicas para una clínica. Esta rama agrega una **API REST** sobre la arquitectura por capas existente, exponiendo la lógica de la aplicación por HTTP + JSON para que cualquier cliente (app móvil, Postman, otro servicio) pueda consumirla, no solo el navegador.
+# Refactorización: Detección de Code Smells
 
-## Documentación de arquitectura — Diagramas C4 (rama `UML`)
+Rama: `CodeSmells`
 
-La rama `UML` se creó a partir de `GOF-Patterns` (la rama más actualizada del
-proyecto) para la **Actividad #29** (Semana 10 — Documentación de
-Arquitectura, materia Arquitectura de Software). Su único propósito es
-agregar documentación de arquitectura **versionada como código**: tres
-diagramas del modelo C4 (Contexto, Contenedores, Componentes) escritos en
-Mermaid dentro de `/docs`, que reflejan el estado real de CitasApp — no un
-diagrama genérico.
+Esta entrega identifica **code smells** en CitasApp y los corrige aplicando técnicas de
+refactorización, sin cambiar el comportamiento observable del sistema. La refactorización
+consiste en mejorar la **estructura interna** del código manteniendo intacto lo que hace:
+el endpoint de confirmación de citas sigue funcionando igual y los observers SMS/EMAIL
+siguen notificando en consola, antes y después.
 
-**Por qué:** un diagrama dibujado en Paint hace un mes deja de coincidir con
-el código en cuanto el proyecto crece — vive en el escritorio de alguien, no
-en el repositorio, y nadie sabe si sigue vigente. Estos diagramas están en
-texto plano dentro del repo: se versionan en el mismo commit que el código,
-se revisan en Code Review como cualquier otro archivo, y GitHub los
-renderiza automáticamente al abrir el `.md`.
+---
 
-**Para quién:** cada nivel tiene una audiencia distinta —
+## Code smells identificados
 
-- **C1 — Contexto**: cualquier persona, técnica o no (cliente, maestro, un
-  compañero nuevo el primer día).
-- **C2 — Contenedores**: el equipo técnico, para entender de qué piezas
-  grandes está hecho el sistema.
-- **C3 — Componentes**: quien va a modificar código dentro de
-  `CitasApp.Web`, donde viven los patrones GOF (Factory, Decorator, Observer)
-  de la práctica #26.
+Se identificaron **2 code smells**, y se refactorizaron **ambos**:
 
-| Nivel | Archivo | Responde |
-|---|---|---|
-| C1 — Contexto | [docs/C1-Contexto.md](docs/C1-Contexto.md) | ¿Qué es el sistema y quién lo usa? |
-| C2 — Contenedores | [docs/C2-Contenedores.md](docs/C2-Contenedores.md) | ¿De qué piezas técnicas grandes se compone? |
-| C3 — Componentes | [docs/C3-Componentes.md](docs/C3-Componentes.md) | ¿Qué hay dentro de `CitasApp.Web`? |
+| # | Code smell | Dónde | Técnica aplicada |
+|---|---|---|---|
+| 1 | **Tight Coupling** (acoplamiento fuerte) | `CitaApiController` dependía de la clase concreta `CitaService` | **Dependency Injection** (interfaz `ICitaService`) |
+| 2 | **Responsabilidad mezclada** (God Class en pequeño) | `CitaService.ConfirmarCita` confirmaba la cita **y** notificaba a los observers | **Extract Class** (`CitaNotificador`) |
 
-## ¿Qué agrega esta rama?
- 
-Hasta la rama anterior, el único cliente de la lógica de negocio era `CitasApp.Web` (MVC, para navegador). Esta rama añade un **quinto proyecto, `CitasApp.Api`**, que reutiliza exactamente las mismas capas de Domain, Application e Infrastructure y solo cambia la "puerta de entrada": en lugar de devolver vistas HTML, devuelve JSON a través de endpoints HTTP.
- 
+---
+
+## Refactor 1 — Tight Coupling → Dependency Injection
+
+### El smell
+
+`CitaApiController` recibía por constructor la **clase concreta** `CitaService`:
+
+```csharp
+private readonly CitaService _citaService;          // ← depende de una clase concreta
+
+public CitaApiController(CitaService citaService)
+{
+    _citaService = citaService;
+}
 ```
-Navegador ─────► CitasApp.Web  ─┐
-                                 ├─► Application ─► Domain ◄─ Infrastructure
-Móvil/Postman ─► CitasApp.Api  ─┘
+
+Aunque ya usaba inyección por constructor, dependía del **tipo concreto**, no de una
+abstracción. Eso amarra el controller a esa implementación específica: no se puede
+sustituir por otra implementación ni mockear para pruebas sin tocar el controller.
+
+### La solución
+
+Se creó la interfaz `ICitaService` (en `CitasApp.Domain/Interfaces/`) y el controller
+pasó a depender de ella:
+
+```csharp
+// ICitaService.cs — nuevo contrato en Domain
+public interface ICitaService
+{
+    bool ConfirmarCita(int citaId);
+}
 ```
- 
-Mismo `Application`, mismo `Domain`, misma `Infrastructure`. Solo un cliente nuevo.
- 
-## Arquitectura
- 
-El proyecto sigue una separación en capas con dependencias dirigidas hacia el dominio:
- 
-| Capa | Proyecto | Responsabilidad |
-|------|----------|-----------------|
-| Dominio | `CitasApp.Domain` | Modelos (`Paciente`, `Medico`, `Cita`) e interfaces de repositorio (puertos). |
-| Aplicación | `CitasApp.Application` | Servicios (`PacienteService`, `MedicoService`, `CitaService`) que orquestan la lógica. Dependen solo del dominio. |
-| Infraestructura | `CitasApp.Infrastructure` | Implementaciones concretas de los repositorios (adapters JSON) que leen los datos. |
-| Presentación (web) | `CitasApp.Web` | Cliente MVC para navegador. |
-| Presentación (API) | `CitasApp.Api` | Cliente REST. Controllers que exponen los servicios como endpoints HTTP. |
- 
-**Flujo de una petición:**
- 
+
+```csharp
+// CitaApiController.cs — ahora depende de la abstracción
+private readonly ICitaService _citaService;
+
+public CitaApiController(ICitaService citaService)
+{
+    _citaService = citaService;
+}
 ```
-GET /api/pacientes
-  → PacientesController          (recibe la petición HTTP)
-  → PacienteService              (lógica de aplicación)
-  → IPacienteRepository          (puerto / interfaz)
-  → JsonPacienteRepository       (adapter que lee pacientes.json)
-  → JSON de respuesta
+
+`CitaService` implementa esa interfaz (`public class CitaService : ICitaService`), y en
+`Program.cs` se registra bajo el contrato:
+
+```csharp
+builder.Services.AddScoped<ICitaService, CitaService>();
 ```
- 
-Los controllers **no tienen lógica de negocio**: solo reciben la petición, llaman al servicio correspondiente y traducen el resultado a un código HTTP (`200 OK`, `404 Not Found`, `400 Bad Request`). El cableado entre interfaz e implementación se hace por **inyección de dependencias** en `Program.cs`, así que cambiar el origen de datos (de JSON a una base de datos) no obliga a tocar los servicios ni los controllers — solo se registra otro adapter.
- 
-## Estructura del proyecto API
- 
+
+### Por qué
+
+Esto invierte la dependencia: el controller ya no conoce la clase concreta, solo el
+contrato. Mañana se puede cambiar la implementación de `CitaService` (o inyectar un mock
+en pruebas) sin modificar el controller. Es exactamente la cura al Tight Coupling que
+plantea la teoría de la semana: *depender de una interfaz, no de una clase concreta*.
+
+---
+
+## Refactor 2 — Responsabilidad mezclada → Extract Class
+
+### El smell
+
+El método `CitaService.ConfirmarCita` hacía **dos cosas distintas**: (1) buscaba la cita
+y cambiaba su estado, y (2) recorría los observers y los notificaba uno por uno.
+
+```csharp
+public bool ConfirmarCita(int citaId)
+{
+    var cita = _citaRepo.ObtenerTodos().FirstOrDefault(c => c.Id == citaId);
+    if (cita is null) return false;
+
+    cita.Estado = "Confirmada";
+
+    // Responsabilidad 2: recorrer y notificar observers (mezclada aquí)
+    foreach (var observer in _observers)
+        observer.Notificar(cita);
+
+    return true;
+}
 ```
-CitasApp.Api/
-├── Controllers/
-│   ├── PacientesController.cs
-│   ├── MedicosController.cs
-│   ├── CitasController.cs
-│   └── CalculadoraController.cs
-├── data/                  ← pacientes.json, medicos.json, citas.json (Copy Always)
-└── Program.cs             ← registro de repositorios y servicios (DI)
+
+`CitaService` cargaba con la responsabilidad de negocio (confirmar) **y** con la de
+orquestar la notificación.
+
+### La solución
+
+Se extrajo la responsabilidad de notificar a una clase propia, `CitaNotificador`
+(en `CitasApp.Domain/Services/`):
+
+```csharp
+// CitaNotificador.cs — nueva clase, una sola responsabilidad
+public class CitaNotificador
+{
+    private readonly IEnumerable<ICitaObserver> _observers;
+
+    public CitaNotificador(IEnumerable<ICitaObserver> observers)
+    {
+        _observers = observers;
+    }
+
+    public void Notificar(Cita cita)
+    {
+        foreach (var observer in _observers)
+            observer.Notificar(cita);
+    }
+}
 ```
- 
-## Endpoints
- 
-Pacientes, médicos y citas (sustituye `{puerto}` por el puerto http):
- 
-| Método | Ruta | Descripción |
-|--------|------|-------------|
-| GET | `/api/pacientes` | Lista de pacientes |
-| GET | `/api/pacientes/{id}` | Un paciente por id (`404` si no existe) |
-| GET | `/api/medicos` | Lista de médicos |
-| GET | `/api/medicos/{id}` | Un médico por id (`404` si no existe) |
-| GET | `/api/citas` | Agenda completa |
-| GET | `/api/citas/porpaciente/{pacienteId}` | Citas de un paciente (`404` si no tiene) |
- 
-Calculadora (parámetros por query string `?a=&b=`):
- 
-| Método | Ruta | Ejemplo de respuesta |
-|--------|------|----------------------|
-| GET | `/api/calculadora/sumar?a=28&b=32` | `{"operacion":"suma","a":28,"b":32,"resultado":60}` |
-| GET | `/api/calculadora/restar?a=28&b=32` | `{"operacion":"resta",...,"resultado":-4}` |
-| GET | `/api/calculadora/multiplicar?a=28&b=32` | `{"operacion":"multiplicacion",...,"resultado":896}` |
-| GET | `/api/calculadora/dividir?a=28&b=32` | `{"operacion":"division",...,"resultado":0.875}` |
- 
-La división entre cero responde `400 Bad Request` con un mensaje de error.
- 
-### Verificación rápida (PowerShell)
- 
-```powershell
-(iwr "http://localhost:5183/api/pacientes").Content
-(iwr "http://localhost:5183/api/citas/porpaciente/2").Content
-(iwr "http://localhost:5183/api/calculadora/sumar?a=28&b=32").Content
+
+`CitaService` ahora recibe el `CitaNotificador` y le **delega** la notificación:
+
+```csharp
+private readonly ICitaRepository _citaRepo;
+private readonly CitaNotificador _notificador;
+
+public bool ConfirmarCita(int citaId)
+{
+    var cita = _citaRepo.ObtenerTodos().FirstOrDefault(c => c.Id == citaId);
+    if (cita is null) return false;
+
+    cita.Estado = "Confirmada";
+    _notificador.Notificar(cita);   // delega la notificación
+
+    return true;
+}
 ```
- 
-## Persistencia
- 
-Actualmente los datos viven en archivos JSON dentro de `CitasApp.Api/data/`, leídos por los repositorios `Json*Repository`. Los archivos deben tener **Copy to Output Directory = Copy Always** para que se copien al directorio de salida; si la API responde `[]`, normalmente es porque esos archivos no se copiaron.
- 
-Esta decisión de persistencia es temporal. Al desplegar en producción, los archivos locales no escalan (varias instancias tendrían datos distintos), por lo que el siguiente paso es sustituir el adapter JSON por uno conectado a una base de datos — sin modificar los servicios, gracias a la separación por capas.
- 
-## Stack
- 
-- ASP.NET Core 10 (Web API)
-- C# / .NET 10
-- Persistencia en JSON (vía repositorios intercambiables)
-- Solución en formato `.slnx`
+
+En `Program.cs` se registra la clase extraída:
+
+```csharp
+builder.Services.AddScoped<CitaNotificador>();
+```
+
+### Por qué
+
+Cada clase queda con **una sola responsabilidad**: `CitaService` confirma la cita,
+`CitaNotificador` notifica. El código es más fácil de leer, probar y modificar: si mañana
+cambia *cómo* se notifica, se toca `CitaNotificador` sin arriesgar la lógica de
+confirmación. El patrón Observer de la práctica anterior se conserva intacto (los
+observers siguen inyectándose como `IEnumerable<ICitaObserver>`), solo se movió a una
+clase dedicada.
+
+---
+
+## Archivos afectados
+
+| Acción | Archivo |
+|---|---|
+| ➕ Nuevo | `CitasApp.Domain/Interfaces/ICitaService.cs` |
+| ➕ Nuevo | `CitasApp.Domain/Services/CitaNotificador.cs` |
+| ✏️ Modificado | `CitasApp.Domain/Services/CitaService.cs` |
+| ✏️ Modificado | `CitasApp.Web/Controllers/CitaApiController.cs` |
+| ✏️ Modificado | `CitasApp.Web/Program.cs` |
+
+---
+
+## Verificación — el comportamiento no cambió
+
+- El proyecto **compila sin errores**: `dotnet build CitasApp.slnx`.
+- El endpoint de confirmación sigue respondiendo igual:
+  `POST /api/citas/confirmar/{citaId}` devuelve `"Cita {id} confirmada"`.
+- Los observers **SMS** y **EMAIL** siguen imprimiendo en consola al confirmar una cita.
+
+El diff entre el commit *antes* y el commit *después* muestra únicamente la
+refactorización descrita, sin cambios de comportamiento — cumpliendo el requisito de la
+actividad: *el comportamiento del sistema debe ser idéntico al de antes*.
+
+---
+
+## Técnicas de refactorización aplicadas (referencia de la semana)
+
+- **Dependency Injection** — depender de una interfaz (`ICitaService`) en vez de una
+  clase concreta, resolviendo el Tight Coupling.
+- **Extract Class** — sacar una responsabilidad completa (`CitaNotificador`) de una clase
+  que hacía de más, dejándola enfocada en una sola tarea.
