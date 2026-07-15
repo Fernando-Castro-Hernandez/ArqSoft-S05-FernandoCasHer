@@ -36,8 +36,11 @@ builder.Services.AddScoped<IPacienteRepository>(sp =>
 builder.Services.AddScoped<ICitaObserver, SmsObserver>();
 builder.Services.AddScoped<ICitaObserver, EmailObserver>();
 
-// CitaService (Domain) recibe el repo de citas + todos los observers
-builder.Services.AddScoped<CitaService>();
+// CitaNotificador (Extract Class) — recibe todos los observers y los notifica
+builder.Services.AddScoped<CitaNotificador>();
+
+// CitaService se registra bajo su interfaz ICitaService (Dependency Injection)
+builder.Services.AddScoped<ICitaService, CitaService>();
 
 var app = builder.Build();
 

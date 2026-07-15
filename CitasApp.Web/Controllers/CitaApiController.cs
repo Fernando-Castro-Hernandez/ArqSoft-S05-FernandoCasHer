@@ -1,4 +1,4 @@
-﻿using Citas_App.Services;
+﻿using Citas_App.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Citas_App.Controllers
@@ -7,9 +7,9 @@ namespace Citas_App.Controllers
     [Route("api/citas")]
     public class CitaApiController : ControllerBase
     {
-        private readonly CitaService _citaService;
+        private readonly ICitaService _citaService;
 
-        public CitaApiController(CitaService citaService)
+        public CitaApiController(ICitaService citaService)
         {
             _citaService = citaService;
         }

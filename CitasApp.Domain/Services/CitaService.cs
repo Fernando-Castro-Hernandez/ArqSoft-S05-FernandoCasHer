@@ -1,19 +1,18 @@
 ﻿using Citas_App.Interfaces;
-using Citas_App.Models;
 
 namespace Citas_App.Services
 {
-    public class CitaService
+    public class CitaService : ICitaService
     {
         private readonly ICitaRepository _citaRepo;
-        private readonly IEnumerable<ICitaObserver> _observers;
+        private readonly CitaNotificador _notificador;
 
-        // Recibe el repo y TODOS los observers registrados.
+        // Recibe el repo y el notificador (que a su vez conoce a los observers).
         // Solo conoce abstracciones de Domain — nunca importa Infrastructure.
-        public CitaService(ICitaRepository citaRepo, IEnumerable<ICitaObserver> observers)
+        public CitaService(ICitaRepository citaRepo, CitaNotificador notificador)
         {
             _citaRepo = citaRepo;
-            _observers = observers;
+            _notificador = notificador;
         }
 
         public bool ConfirmarCita(int citaId)
@@ -23,11 +22,11 @@ namespace Citas_App.Services
 
             cita.Estado = "Confirmada";
 
-            // Avisa a todos los suscriptores sin saber quiénes son
-            foreach (var observer in _observers)
-                observer.Notificar(cita);
+            // Delega la notificación a la clase extraída
+            _notificador.Notificar(cita);
 
             return true;
         }
     }
 }
+
