@@ -3,6 +3,9 @@ using Citas_App.Repositories;
 using CitasApp.Infrastructure.Repositories;
 using Citas_App.Services;
 using Citas_App.Observers;
+using Citas_App.Data;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +45,17 @@ builder.Services.AddScoped<CitaNotificador>();
 // CitaService se registra bajo su interfaz ICitaService (Dependency Injection)
 builder.Services.AddScoped<ICitaService, CitaService>();
 
+// ── Base de datos (PostgreSQL) + Identity Core ───────────────────────────────
+// DbContext apunta a PostgreSQL usando la cadena de appsettings.json.
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// Identity: usuarios + roles, respaldados por AppDbContext (las tablas AspNet*).
+builder.Services.AddIdentity<IdentityUser, IdentityRole>()
+    .AddEntityFrameworkStores<AppDbContext>()
+    .AddDefaultTokenProviders();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
@@ -54,6 +68,7 @@ if (!app.Environment.IsDevelopment())
 app.UseHttpsRedirection();
 app.UseRouting();
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapStaticAssets();
