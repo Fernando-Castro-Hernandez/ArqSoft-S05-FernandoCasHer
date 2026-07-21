@@ -12,7 +12,7 @@ namespace Citas_App.Tests
             var cita = new Cita();
 
             // Assert
-            Assert.Equal("Pendiente", cita.Estado);
+            Assert.Equal("PRUEBA", cita.Estado);
         }
 
         [Fact]
